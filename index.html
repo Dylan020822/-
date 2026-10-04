@@ -216,15 +216,23 @@
 
         // Environment variables
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'gacha-reservation-app';
-        let firebaseConfig = {};
+                // Environment variables
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'gacha-reservation-app';
+        
+        const firebaseConfig = {
+             apiKey: "AIzaSyBI5VZ3LqxYneiPUoJUnnOHZR_IZyRpMAo",
+             authDomain: "pindeisian.firebaseapp.com",
+             databaseURL: "https://pindeisian-default-rtdb.firebaseio.com",
+             projectId: "pindeisian",
+             storageBucket: "pindeisian.firebasestorage.app",
+             messagingSenderId: "659912805269",
+             appId: "1:659912805269:web:f79330fb5c098dbf6f849c",
+             measurementId: "G-M7CLHEXL2B"
+        };
         let initialToken = null;
 
-        try {
-            if (typeof __firebase_config !== 'undefined') firebaseConfig = JSON.parse(__firebase_config);
-            if (typeof __initial_auth_token !== 'undefined') initialToken = __initial_auth_token;
-        } catch (e) {
-            console.error("Config parse error", e);
-        }
+        // Initialize Firebase
+
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
