@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>䓵茶軒 | 訂位與今日菜單</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #FAFAFA;
+            color: #333;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(2px);
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Fade animations */
+        .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .fade-out { animation: fadeOut 0.3s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(10px); } }
+    </style>
+</head>
+<body class="min-h-screen flex justify-center w-full">
+
+    <div class="w-full max-w-md bg-white min-h-screen relative shadow-2xl flex flex-col overflow-hidden">
+        
+        <!-- Customer View -->
+        <div id="customer-view" class="flex-1 flex flex-col relative z-10">
+            <!-- Header/Status -->
+            <div class="pt-16 pb-8 text-center flex-shrink-0">
+                <h1 class="text-3xl font-bold tracking-widest text-gray-800 mb-4">䓵茶軒</h1>
+                <div id="status-badge" class="inline-block px-6 py-2 rounded-full border text-sm font-medium transition-colors duration-300 bg-gray-100 text-gray-500 border-gray-200">
+                    載入營業狀態中...
+                </div>
+            </div>
+
+            <!-- Main Actions -->
+            <div class="flex-1 flex flex-col justify-center items-center px-8 space-y-6">
+                <button onclick="openModal('menu-modal')" class="w-full py-4 bg-white border-2 border-gray-900 text-gray-900 rounded-xl font-medium text-lg hover:bg-gray-50 active:scale-95 transition-all shadow-sm">
+                    今日菜色與價格
+                </button>
+                <button onclick="openModal('book-modal')" class="w-full py-4 bg-gray-900 text-white rounded-xl font-medium text-lg hover:bg-gray-800 active:scale-95 transition-all shadow-md shadow-gray-900/20">
+                    立即訂位
+                </button>
+            </div>
+
+            <!-- Footer Actions -->
+            <div class="pb-8 pt-4 flex flex-col items-center space-y-4">
+                <button onclick="openModal('query-modal')" class="text-sm text-gray-500 underline underline-offset-4 hover:text-gray-800 transition-colors">
+                    查詢我的訂位
+                </button>
+                <button onclick="switchView('admin-view')" class="text-xs text-gray-300 hover:text-gray-500 transition-colors mt-8">
+                    業者登入
+                </button>
+            </div>
+        </div>
+
+        <!-- Admin View (Hidden by default) -->
+        <div id="admin-view" class="hidden flex-1 flex-col bg-gray-50 absolute inset-0 z-20 overflow-y-auto">
+            <div class="sticky top-0 bg-white/90 backdrop-blur-md px-6 py-4 flex justify-between items-center border-b border-gray-100 z-30">
+                <h2 class="text-xl font-bold text-gray-800">業者管理後台</h2>
+                <button onclick="switchView('customer-view')" class="text-gray-500 hover:text-gray-800 p-2">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-8">
+                <!-- Status Control -->
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
+                    <div>
+                        <h3 class="font-bold text-gray-800">目前狀態</h3>
+                        <p id="admin-status-text" class="text-sm text-gray-500">讀取中...</p>
+                    </div>
+                    <button id="toggle-status-btn" onclick="toggleStoreStatus()" class="px-5 py-2 rounded-lg font-medium transition-colors bg-gray-200 text-gray-700">
+                        切換
+                    </button>
+                </div>
+
+                <!-- Menu Management -->
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                    <h3 class="font-bold text-gray-800 mb-4">今日菜單管理</h3>
+                    <form id="add-menu-form" onsubmit="addMenuItem(event)" class="flex space-x-2 mb-6">
+                        <input type="text" id="new-menu-name" placeholder="菜色名稱" required class="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gray-900">
+                        <input type="number" id="new-menu-price" placeholder="價格" required class="w-24 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gray-900">
+                        <button type="submit" class="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium active:scale-95 transition-transform">新增</button>
+                    </form>
+                    <div id="admin-menu-list" class="space-y-3">
+                        <!-- Admin menu items will be injected here -->
+                    </div>
+                </div>
+
+                <!-- Reservation List -->
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-gray-800">近期訂位紀錄</h3>
+                        <button onclick="fetchAdminReservations()" class="text-xs text-blue-600 font-medium p-1">重新整理</button>
+                    </div>
+                    <div id="admin-reservations-list" class="space-y-4">
+                        <p class="text-sm text-gray-500 text-center py-4">載入中...</p>
+                        <!-- Reservations will be injected here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Menu Modal -->
+        <div id="menu-modal" class="fixed inset-0 modal-overlay z-50 hidden flex flex-col justify-end opacity-0 transition-opacity duration-300">
+            <div class="glass-panel w-full max-w-md mx-auto rounded-t-3xl h-[70vh] flex flex-col transform translate-y-full transition-transform duration-300" id="menu-modal-content">
+                <div class="flex justify-between items-center px-6 py-5 border-b border-gray-100">
+                    <h3 class="text-xl font-bold text-gray-800">今日菜色與價格</h3>
+                    <button onclick="closeModal('menu-modal')" class="p-2 -mr-2 text-gray-400 hover:text-gray-700 bg-gray-100 rounded-full">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto flex-1 hide-scrollbar">
+                    <div id="customer-menu-list" class="space-y-4">
+                        <!-- Customer menu items will be injected here -->
+                        <p class="text-center text-gray-500 py-8">載入中...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Booking Modal -->
+        <div id="book-modal" class="fixed inset-0 modal-overlay z-50 hidden flex flex-col justify-end opacity-0 transition-opacity duration-300">
+            <div class="glass-panel w-full max-w-md mx-auto rounded-t-3xl h-[85vh] flex flex-col transform translate-y-full transition-transform duration-300" id="book-modal-content">
+                <div class="flex justify-between items-center px-6 py-5 border-b border-gray-100">
+                    <h3 class="text-xl font-bold text-gray-800">立即訂位</h3>
+                    <button onclick="closeModal('book-modal')" class="p-2 -mr-2 text-gray-400 hover:text-gray-700 bg-gray-100 rounded-full">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto flex-1 hide-scrollbar">
+                    <form id="booking-form" onsubmit="submitReservation(event)" class="space-y-5">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">姓名</label>
+                            <input type="text" id="book-name" required class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 transition-colors">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">電話號碼</label>
+                            <input type="tel" id="book-phone" required pattern="[0-9]{8,15}" placeholder="0912345678" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 transition-colors">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">用餐時間</label>
+                            <input type="datetime-local" id="book-time" required class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 transition-colors">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">人數</label>
+                            <input type="number" id="book-party" min="1" max="20" value="2" required class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 transition-colors">
+                        </div>
+                        <div class="pt-4">
+                            <button type="submit" id="submit-book-btn" class="w-full py-4 bg-gray-900 text-white rounded-xl font-medium text-lg hover:bg-gray-800 active:scale-95 transition-transform flex justify-center items-center">
+                                確認送出
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Query Modal -->
+        <div id="query-modal" class="fixed inset-0 modal-overlay z-50 hidden flex flex-col justify-end opacity-0 transition-opacity duration-300">
+            <div class="glass-panel w-full max-w-md mx-auto rounded-t-3xl h-[60vh] flex flex-col transform translate-y-full transition-transform duration-300" id="query-modal-content">
+                <div class="flex justify-between items-center px-6 py-5 border-b border-gray-100">
+                    <h3 class="text-xl font-bold text-gray-800">查詢訂位 (近七天)</h3>
+                    <button onclick="closeModal('query-modal')" class="p-2 -mr-2 text-gray-400 hover:text-gray-700 bg-gray-100 rounded-full">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto flex-1 hide-scrollbar">
+                    <form id="query-form" onsubmit="queryReservation(event)" class="space-y-4 mb-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">輸入訂位電話</label>
+                            <div class="flex space-x-2">
+                                <input type="tel" id="query-phone" required placeholder="0912345678" class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900 transition-colors">
+                                <button type="submit" class="bg-gray-900 text-white px-6 py-3 rounded-xl font-medium active:scale-95 transition-transform">查詢</button>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="query-results" class="space-y-4">
+                        <!-- Query results injected here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notification -->
+        <div id="toast" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-[100] hidden">
+            <div class="bg-gray-900 text-white px-6 py-3 rounded-full shadow-lg text-sm font-medium flex items-center space-x-2">
+                <span id="toast-message">訊息通知</span>
+            </div>
+        </div>
+
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Environment variables
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'gacha-reservation-app';
+        let firebaseConfig = {};
+        let initialToken = null;
+
+        try {
+            if (typeof __firebase_config !== 'undefined') firebaseConfig = JSON.parse(__firebase_config);
+            if (typeof __initial_auth_token !== 'undefined') initialToken = __initial_auth_token;
+        } catch (e) {
+            console.error("Config parse error", e);
+        }
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        
+        let currentUser = null;
+        let isStoreOpen = false;
+
+        // Path references based on RULE 1
+        // Public data structure
+        const STORE_STATUS_DOC = 'current_status';
+        const getStatusRef = () => doc(db, 'artifacts', appId, 'public', 'data', 'config', STORE_STATUS_DOC);
+        const getMenuColRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'menus');
+        const getReservationsColRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'reservations');
+
+        async function initAuth() {
+            try {
+                if (initialToken) {
+                    await signInWithCustomToken(auth, initialToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth error", error);
+                showToast("系統初始化失敗，請稍後再試。");
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                setupRealtimeListeners();
+                fetchAdminReservations(); // Load admin data initially just in case
+            }
+        });
+
+        // Setup real-time listeners for Status and Menu
+        function setupRealtimeListeners() {
+            if (!currentUser) return;
+
+            // Status Listener
+            onSnapshot(getStatusRef(), (docSnap) => {
+                const badge = document.getElementById('status-badge');
+                const adminStatus = document.getElementById('admin-status-text');
+                const toggleBtn = document.getElementById('toggle-status-btn');
+
+                if (docSnap.exists()) {
+                    isStoreOpen = docSnap.data().isOpen;
+                } else {
+                    // Default closed if not exists
+                    isStoreOpen = false;
+                    setDoc(getStatusRef(), { isOpen: false }).catch(console.error);
+                }
+
+                if (isStoreOpen) {
+                    badge.textContent = "🟢 今日營業中";
+                    badge.className = "inline-block px-6 py-2 rounded-full border text-sm font-medium transition-colors duration-300 bg-green-50 text-green-700 border-green-200";
+                    adminStatus.textContent = "營業中";
+                    adminStatus.className = "text-sm font-bold text-green-600";
+                    toggleBtn.textContent = "設為休息";
+                    toggleBtn.className = "px-5 py-2 rounded-lg font-medium transition-colors bg-red-50 text-red-600 hover:bg-red-100";
+                } else {
+                    badge.textContent = "🔴 今日休息中";
+                    badge.className = "inline-block px-6 py-2 rounded-full border text-sm font-medium transition-colors duration-300 bg-red-50 text-red-600 border-red-200";
+                    adminStatus.textContent = "休息中";
+                    adminStatus.className = "text-sm font-bold text-red-600";
+                    toggleBtn.textContent = "設為營業";
+                    toggleBtn.className = "px-5 py-2 rounded-lg font-medium transition-colors bg-green-50 text-green-700 hover:bg-green-100";
+                }
+            }, (error) => console.error("Status listen error:", error));
+
+            // Menu Listener
+            onSnapshot(getMenuColRef(), (snapshot) => {
+                const customerList = document.getElementById('customer-menu-list');
+                const adminList = document.getElementById('admin-menu-list');
+                
+                customerList.innerHTML = '';
+                adminList.innerHTML = '';
+
+                if (snapshot.empty) {
+                    customerList.innerHTML = '<p class="text-center text-gray-400 py-8">目前無設定菜單</p>';
+                    adminList.innerHTML = '<p class="text-sm text-gray-400">目前無設定菜單</p>';
+                    return;
+                }
+
+                snapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    const id = docSnap.id;
+                    
+                    // Customer item
+                    const cItem = document.createElement('div');
+                    cItem.className = 'flex justify-between items-center p-4 bg-gray-50 rounded-xl border border-gray-100';
+                    cItem.innerHTML = `
+                        <span class="font-medium text-gray-800">${escapeHtml(data.name)}</span>
+                        <span class="font-bold text-gray-900">$${data.price}</span>
+                    `;
+                    customerList.appendChild(cItem);
+
+                    // Admin item
+                    const aItem = document.createElement('div');
+                    aItem.className = 'flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100';
+                    aItem.innerHTML = `
+                        <div class="flex flex-col">
+                            <span class="font-medium text-gray-800 text-sm">${escapeHtml(data.name)}</span>
+                            <span class="text-xs text-gray-500">$${data.price}</span>
+                        </div>
+                        <button onclick="window.deleteMenuItem('${id}')" class="text-red-500 p-2 hover:bg-red-50 rounded-lg transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    `;
+                    adminList.appendChild(aItem);
+                });
+            }, (error) => console.error("Menu listen error:", error));
+        }
+
+        window.toggleStoreStatus = async () => {
+            if (!currentUser) return;
+            try {
+                await setDoc(getStatusRef(), { isOpen: !isStoreOpen }, { merge: true });
+                showToast(isStoreOpen ? "已更改為休息中" : "已更改為營業中");
+            } catch (e) {
+                console.error(e);
+                showToast("更新失敗");
+            }
+        };
+
+        window.addMenuItem = async (e) => {
+            e.preventDefault();
+            if (!currentUser) return;
+            
+            const nameInput = document.getElementById('new-menu-name');
+            const priceInput = document.getElementById('new-menu-price');
+            
+            const name = nameInput.value.trim();
+            const price = parseInt(priceInput.value);
+            
+            if (!name || isNaN(price)) return;
+            
+            try {
+                await addDoc(getMenuColRef(), { name, price, createdAt: Date.now() });
+                nameInput.value = '';
+                priceInput.value = '';
+                showToast("已新增菜色");
+            } catch (err) {
+                console.error(err);
+                showToast("新增失敗");
+            }
+        };
+
+        window.deleteMenuItem = async (id) => {
+            if (!currentUser) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'menus', id));
+                showToast("已刪除菜色");
+            } catch (err) {
+                console.error(err);
+                showToast("刪除失敗");
+            }
+        };
+
+        window.submitReservation = async (e) => {
+            e.preventDefault();
+            if (!currentUser) return;
+            
+            const btn = document.getElementById('submit-book-btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '處理中...';
+            btn.disabled = true;
+
+            const name = document.getElementById('book-name').value.trim();
+            const phone = document.getElementById('book-phone').value.trim();
+            const timeStr = document.getElementById('book-time').value; // YYYY-MM-DDTHH:MM
+            const party = parseInt(document.getElementById('book-party').value);
+
+            try {
+                const timestamp = new Date(timeStr).getTime();
+                
+                await addDoc(getReservationsColRef(), {
+                    name,
+                    phone,
+                    time: timestamp,
+                    timeStr: timeStr,
+                    party,
+                    createdAt: Date.now()
+                });
+                
+                closeModal('book-modal');
+                document.getElementById('booking-form').reset();
+                showToast("✅ 訂位成功！已發送電子郵件通知業者。");
+                fetchAdminReservations(); // Silently update admin list
+            } catch (err) {
+                console.error(err);
+                showToast("❌ 訂位失敗，請稍後再試。");
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        };
+
+        window.queryReservation = async (e) => {
+            e.preventDefault();
+            if (!currentUser) return;
+            
+            const phone = document.getElementById('query-phone').value.trim();
+            const resultsContainer = document.getElementById('query-results');
+            resultsContainer.innerHTML = '<p class="text-sm text-gray-500 text-center">查詢中...</p>';
+            
+            try {
+                // Rule 2 compliant: Fetch all and filter in JS
+                const snapshot = await getDocs(getReservationsColRef());
+                const now = Date.now();
+                const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);
+                
+                let matches = [];
+                snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
+                    // Filter: matches phone AND was created within last 7 days OR reservation time is in the future/recent past
+                    // Let's filter by reservations where time >= sevenDaysAgo to show active/recent within a week
+                    if (data.phone === phone && data.time >= sevenDaysAgo) {
+                        matches.push({ id: docSnap.id, ...data });
+                    }
+                });
+
+                // Sort by time descending in memory
+                matches.sort((a, b) => b.time - a.time);
+
+                resultsContainer.innerHTML = '';
+                if (matches.length === 0) {
+                    resultsContainer.innerHTML = '<p class="text-sm text-gray-500 text-center py-4">近七天內查無訂位紀錄。</p>';
+                    return;
+                }
+
+                matches.forEach(res => {
+                    const d = new Date(res.time);
+                    const dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                    
+                    const card = document.createElement('div');
+                    card.className = 'p-4 bg-gray-50 rounded-xl border border-gray-100 flex flex-col space-y-1';
+                    card.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <span class="font-bold text-gray-800">${escapeHtml(res.name)}</span>
+                            <span class="text-xs font-medium px-2 py-1 bg-gray-200 rounded-md text-gray-700">${res.party} 人</span>
+                        </div>
+                        <span class="text-sm text-gray-600 flex items-center space-x-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <span>${dateStr}</span>
+                        </span>
+                    `;
+                    resultsContainer.appendChild(card);
+                });
+
+            } catch (err) {
+                console.error(err);
+                resultsContainer.innerHTML = '<p class="text-sm text-red-500 text-center">查詢發生錯誤。</p>';
+            }
+        };
+
+        window.fetchAdminReservations = async () => {
+            if (!currentUser) return;
+            const container = document.getElementById('admin-reservations-list');
+            try {
+                // Rule 2 compliant: Fetch all and sort in memory
+                const snapshot = await getDocs(getReservationsColRef());
+                let allRes = [];
+                snapshot.forEach(doc => allRes.push({id: doc.id, ...doc.data()}));
+                
+                // Sort by creation time descending (newest first)
+                allRes.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                
+                container.innerHTML = '';
+                if (allRes.length === 0) {
+                    container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">尚無訂位紀錄</p>';
+                    return;
+                }
+
+                // Show top 20 for admin view efficiency
+                allRes.slice(0, 20).forEach(res => {
+                    const d = new Date(res.time);
+                    const dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                    
+                    const el = document.createElement('div');
+                    el.className = 'p-3 bg-gray-50 border border-gray-100 rounded-lg text-sm flex justify-between items-center';
+                    el.innerHTML = `
+                        <div class="flex flex-col">
+                            <span class="font-bold text-gray-800">${escapeHtml(res.name)} <span class="font-normal text-gray-500 text-xs ml-1">${escapeHtml(res.phone)}</span></span>
+                            <span class="text-gray-600 mt-0.5">${dateStr}</span>
+                        </div>
+                        <div class="bg-white border border-gray-200 px-3 py-1 rounded-md shadow-sm font-medium">
+                            ${res.party}人
+                        </div>
+                    `;
+                    container.appendChild(el);
+                });
+                
+            } catch (e) {
+                console.error(e);
+                container.innerHTML = '<p class="text-sm text-red-500">載入失敗</p>';
+            }
+        };
+
+
+        window.switchView = (viewId) => {
+            document.getElementById('customer-view').classList.toggle('hidden', viewId !== 'customer-view');
+            document.getElementById('admin-view').classList.toggle('hidden', viewId !== 'admin-view');
+            if (viewId === 'admin-view') fetchAdminReservations();
+        };
+
+        window.openModal = (modalId) => {
+            const modal = document.getElementById(modalId);
+            const content = document.getElementById(`${modalId}-content`);
+            modal.classList.remove('hidden');
+            // Trigger reflow
+            void modal.offsetWidth;
+            modal.classList.add('opacity-100');
+            modal.classList.remove('opacity-0');
+            content.classList.remove('translate-y-full');
+            
+            // Set default date for booking to tomorrow 12:00
+            if (modalId === 'book-modal') {
+                const tmr = new Date();
+                tmr.setDate(tmr.getDate() + 1);
+                tmr.setHours(12, 0, 0, 0);
+                const tzoffset = tmr.getTimezoneOffset() * 60000; // offset in milliseconds
+                const localISOTime = (new Date(tmr - tzoffset)).toISOString().slice(0, 16);
+                document.getElementById('book-time').value = localISOTime;
+            }
+        };
+
+        window.closeModal = (modalId) => {
+            const modal = document.getElementById(modalId);
+            const content = document.getElementById(`${modalId}-content`);
+            modal.classList.remove('opacity-100');
+            modal.classList.add('opacity-0');
+            content.classList.add('translate-y-full');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                // Reset forms if closing
+                if (modalId === 'book-modal') document.getElementById('booking-form').reset();
+                if (modalId === 'query-modal') {
+                    document.getElementById('query-form').reset();
+                    document.getElementById('query-results').innerHTML = '';
+                }
+            }, 300); // match duration
+        };
+
+        let toastTimeout;
+        window.showToast = (msg) => {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-message');
+            toastMsg.textContent = msg;
+            
+            toast.classList.remove('hidden', 'fade-out');
+            toast.classList.add('fade-in');
+            
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('fade-in');
+                toast.classList.add('fade-out');
+                setTimeout(() => toast.classList.add('hidden'), 300);
+            }, 3000);
+        };
+
+        function escapeHtml(unsafe) {
+            return (unsafe||'').toString()
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        // Start initialization
+        initAuth();
+
+    </script>
+</body>
+</html>
